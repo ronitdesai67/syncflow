@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum support in Prisma, so these are validated
+// application-side (see src/constants.js) and stored as plain strings:
+//   TriggerType:  WEBHOOK | SCHEDULE | MANUAL
+//   ActionType:   HTTP_REQUEST | TRANSFORM | DELAY | LOG
+//   RunStatus:    SUCCESS | FAILED | RUNNING
+//   StepStatus:   SUCCESS | FAILED | SKIPPED
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  createdAt    DateTime @default(now())
+}
+
+model Workflow {
+  id             String         @id @default(cuid())
+  userId         String
+  name           String
+  description    String?
+  triggerType    String         @default("MANUAL")
+  webhookToken   String         @unique @default(cuid())
+  cronExpression String?
+  isActive       Boolean        @default(true)
+  steps          WorkflowStep[]
+  runs           WorkflowRun[]
+  createdAt      DateTime       @default(now())
+}
+
+model WorkflowStep {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  order      Int
+  actionType String
+  config     String // JSON string, parsed/stringified in app code
+
+  @@index([workflowId])
+}
+
+model WorkflowRun {
+  id           String        @id @default(cuid())
+  workflowId   String
+  workflow     Workflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status       String        @default("RUNNING")
+  trigger      String
+  startedAt    DateTime      @default(now())
+  finishedAt   DateTime?
+  inputPayload String // JSON string
+  stepLogs     RunStepLog[]
+
+  @@index([workflowId])
+}
+
+model RunStepLog {
+  id         String      @id @default(cuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepOrder  Int
+  actionType String
+  status     String
+  durationMs Int
+  output     String // JSON string
+  error      String?
+
+  @@index([runId])
+}
