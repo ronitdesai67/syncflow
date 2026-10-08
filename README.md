@@ -2,7 +2,7 @@
 
 A lightweight, Zapier-style workflow automation platform built for **Fieldstream Logistics** (fictional client, built as a portfolio case study) — an ops-heavy startup whose team was manually copy-pasting data between their onboarding form, warehouse system, and CRM every day.
 
-**Live demo:** _add your deployed URL here_
+**Live demo:** <https://syncflow-eight-gray.vercel.app>
 **Demo login** (one click on the login screen, no typing):
 
 | Email | Password |
