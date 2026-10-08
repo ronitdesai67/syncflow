@@ -1,33 +1,15 @@
+// Local development entrypoint: binds a port, runs the demo reseed as an
+// in-process cron job, and starts the real node-cron scheduler so SCHEDULE
+// workflows fire on their true cadence. Production (Vercel) never loads this
+// file — it imports src/app.js as a serverless function and drives both the
+// reseed and the schedule tick through Vercel Cron instead.
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
 const cron = require('node-cron');
 
-const authRoutes = require('./routes/auth');
-const workflowRoutes = require('./routes/workflows');
-const hookRoutes = require('./routes/hooks');
+const app = require('./app');
 const { seedDatabase } = require('../prisma/seed');
 const { initScheduler } = require('./lib/scheduler');
 
-const app = express();
-
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5175' }));
-app.use(express.json());
-
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
-
-app.use('/api/auth', authRoutes);
-app.use('/api/workflows', workflowRoutes);
-app.use('/api/hooks', hookRoutes);
-
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// Public demo: reset seed data on a schedule so it self-heals from whatever
-// visitors trigger (manual runs, webhook pokes, etc), keeping dates relative
-// to "now".
 if (process.env.DEMO_RESEED_CRON) {
   cron.schedule(process.env.DEMO_RESEED_CRON, () => {
     console.log('Running scheduled demo reseed...');

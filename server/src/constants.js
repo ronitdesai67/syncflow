@@ -1,5 +1,5 @@
-// SQLite has no native enum type, so these values are enforced in application
-// code instead of the database schema.
+// These values are enforced in application code rather than as database enum
+// types, so the allowed set lives in exactly one place.
 module.exports = {
   TRIGGER_TYPES: ['WEBHOOK', 'SCHEDULE', 'MANUAL'],
   ACTION_TYPES: ['HTTP_REQUEST', 'TRANSFORM', 'DELAY', 'LOG'],

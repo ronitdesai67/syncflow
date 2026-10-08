@@ -1,14 +1,19 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" keeps local dev working; the rhel target is what Vercel's
+  // serverless runtime (Amazon Linux 2023) actually loads at cold start.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// SQLite has no native enum support in Prisma, so these are validated
-// application-side (see src/constants.js) and stored as plain strings:
+// These started as plain strings because SQLite has no native enum support,
+// and stayed that way through the move to Postgres: they are validated
+// application-side (see src/constants.js) so the set of allowed values lives in
+// one place rather than being split between code and a database type.
 //   TriggerType:  WEBHOOK | SCHEDULE | MANUAL
 //   ActionType:   HTTP_REQUEST | TRANSFORM | DELAY | LOG
 //   RunStatus:    SUCCESS | FAILED | RUNNING

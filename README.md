@@ -37,17 +37,21 @@ An `HTTP_REQUEST` step that calls a user-supplied URL from the server, triggered
 
 ## Tech stack
 
-- **Backend:** Node.js, Express, Prisma ORM, SQLite (swappable to Postgres via `DATABASE_URL`), `node-cron` for schedules, `express-rate-limit`, `ipaddr.js` for SSRF range classification, `lodash.get` for safe (non-`eval`) template resolution
+- **Backend:** Node.js, Express, Prisma ORM, PostgreSQL (swappable to Postgres via `DATABASE_URL`), `node-cron` for schedules, `express-rate-limit`, `ipaddr.js` for SSRF range classification, `lodash.get` for safe (non-`eval`) template resolution
 - **Frontend:** React 19, Vite, Tailwind CSS, React Router
 - **Auth:** JWT, bcrypt password hashing, single demo account (this project's focus is the automation engine, not multi-tenant org management)
 
 ## Running it locally
 
+Needs a PostgreSQL database. Create one and point `server/.env` at it
+(copy `server/.env.example` for the full list of variables):
+
 ```bash
 # Backend
 cd server
 npm install
-npx prisma migrate dev
+cp .env.example .env          # then set DATABASE_URL
+npx prisma migrate deploy
 node prisma/seed.js
 npm run dev        # http://localhost:4200
 
@@ -56,6 +60,10 @@ cd client
 npm install
 npm run dev         # http://localhost:5175
 ```
+
+The client calls `/api` as a relative path and Vite proxies it to the
+backend port in dev, which is the same path it uses in production -- so
+there is no API URL to configure in either environment.
 
 Try the webhook live once it's running:
 
@@ -69,9 +77,44 @@ curl -X POST http://localhost:4200/api/hooks/<workflowId>/<webhookToken> \
 
 ## Notes on the public demo
 
-1. `DEMO_RESEED_CRON` (set in the deployed server's env, e.g. `0 */3 * * *`) re-runs the seed script on a schedule, undoing whatever visitors triggered — extra runs, added steps, deactivated workflows — and re-syncs the scheduler afterward.
+1. A daily Vercel Cron job (`/api/cron/reseed`) re-runs the seed script on a schedule, undoing whatever visitors triggered — extra runs, added steps, deactivated workflows — and re-syncs the scheduler afterward.
 2. Run-history timestamps in the seed data are generated relative to "now" at seed time, so the demo never looks stale no matter when someone visits.
 3. The webhook and "Run now" trigger real outbound HTTP calls to public test endpoints — expect the occasional slow response or timeout from those third-party services; that's real network behavior, not a bug, and it's exactly what the per-step logging is designed to surface honestly.
+
+## Deploying
+
+This deploys to Vercel as a **single project**: the Vite client builds to
+static files and the Express API runs as one serverless function mounted at
+`/api` on the same domain (`api/index.js` simply exports the app). Because
+both halves share an origin, there is no CORS configuration and no API URL to
+keep in sync.
+
+Two consequences of serverless shaped the code:
+
+- **Postgres, not SQLite.** Vercel's filesystem is read-only apart from an
+  ephemeral `/tmp`, so a SQLite file cannot persist anything a visitor does.
+  `src/prisma.js` also caches the client on `globalThis` so a warm container
+  reuses one connection pool instead of opening a new one per invocation.
+- **Cron is external.** There is no long-lived process to hold a timer, so the
+  demo reseed runs as a Vercel Cron job against `/api/cron/reseed`, guarded by
+  a `CRON_SECRET` bearer token (the endpoint rewrites every table, so it
+  refuses all requests when that secret is unset).
+
+`node-cron` still drives SCHEDULE workflows in local development, where the
+server is a long-lived process. On Vercel it cannot: a function is torn down
+as soon as its request finishes, so `src/lib/scheduler.js` becomes an explicit
+no-op there and Vercel Cron calls `/api/cron/tick` instead. That endpoint
+(`src/lib/scheduleTick.js`) works out which workflows are *due* by reusing the
+same conservative minute-field heuristic the create/update validator already
+applies, so a workflow never fires more often than its cron expression allows.
+On the Vercel Hobby plan crons run once a day, which makes scheduled runs in
+the public demo daily rather than hourly -- the webhook and "Run now" triggers
+are unaffected and still fire instantly.
+
+Required environment variables (see `server/.env.example`): `DATABASE_URL`,
+`JWT_SECRET`, `CRON_SECRET`. The build command runs `prisma migrate deploy`
+and the seed script, so a fresh deploy provisions and populates its own
+database.
 
 ## What I'd build next for a real client
 
